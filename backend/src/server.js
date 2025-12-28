@@ -1,122 +1,91 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 require('dotenv').config();
 
-// Database connection
-const { connectDB, checkHealth } = require('./config/database');
-
-// Routes
 const authRoutes = require('./routes/authRoutes');
 const jobRoutes = require('./routes/jobRoutes');
 const userRoutes = require('./routes/userRoutes');
-
-// Error handling
-const { errorHandler, notFound } = require('./utils/errorHandler');
+const swaggerDocs = require('./config/swagger');
 
 const app = express();
 
-// Connect to MongoDB Atlas
-connectDB();
-
-// Security middleware
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "https:"]
-    }
-  },
-  crossOriginEmbedderPolicy: false
-}));
-
-// CORS configuration
+// Middleware
+app.use(helmet());
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+app.use(express.json());
+app.use(morgan('dev'));
 
-// Body parsing middleware
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Database Connection
+mongoose.connect(process.env.MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+.then(() => console.log('✅ MongoDB Atlas Connected'))
+.catch(err => console.error('❌ MongoDB connection error:', err));
 
-// Logging
-if (process.env.NODE_ENV === 'development') {
-  app.use(morgan('dev'));
-} else {
-  app.use(morgan('combined'));
-}
+// Swagger Documentation
+swaggerDocs(app, process.env.PORT || 5000);
 
-// Health check endpoint
-app.get('/health', async (req, res) => {
-  const health = await checkHealth();
-  res.status(health.status === 'healthy' ? 200 : 503).json(health);
-});
-
-// API Routes
+// Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/users', userRoutes);
 
-// Welcome route
+// Basic route
 app.get('/', (req, res) => {
-  res.json({
-    message: 'Welcome to Job Portal API',
-    version: '1.0.0',
+  res.json({ 
+    message: 'Job Portal API is running!',
     documentation: '/api-docs',
-    health: '/health'
+    health: '/health',
+    version: '1.0.0'
   });
 });
 
-// 404 handler
-app.use('*', notFound);
-
-// Global error handler
-app.use(errorHandler);
-
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err) => {
-  console.error('Unhandled Rejection:', err);
-  // Close server & exit process
-  process.exit(1);
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+  });
 });
 
-// Handle uncaught exceptions
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
-  process.exit(1);
+// Error Handling Middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(err.status || 500).json({
+    success: false,
+    message: err.message || 'Something went wrong!'
+  });
+});
+
+// 404 Handler
+app.use('*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'Route not found',
+    availableRoutes: [
+      { path: '/api-docs', method: 'GET', description: 'API Documentation' },
+      { path: '/health', method: 'GET', description: 'Health Check' },
+      { path: '/api/auth/*', method: 'POST,GET', description: 'Authentication' },
+      { path: '/api/jobs/*', method: 'GET,POST,PUT,DELETE', description: 'Job Management' },
+      { path: '/api/users/*', method: 'GET,PUT', description: 'User Management' }
+    ]
+  });
 });
 
 const PORT = process.env.PORT || 5000;
 
-const server = app.listen(PORT, () => {
+app.listen(PORT, () => {
   console.log(`🚀 Server running in ${process.env.NODE_ENV || 'development'} mode`);
   console.log(`🌐 Listening on port ${PORT}`);
   console.log(`📚 API Documentation: http://localhost:${PORT}/api-docs`);
 });
-
-// Handle graceful shutdown
-const gracefulShutdown = () => {
-  console.log('Received shutdown signal, closing server...');
-  
-  server.close(() => {
-    console.log('HTTP server closed');
-    process.exit(0);
-  });
-
-  // Force close after 10 seconds
-  setTimeout(() => {
-    console.error('Could not close connections in time, forcefully shutting down');
-    process.exit(1);
-  }, 10000);
-};
-
-process.on('SIGTERM', gracefulShutdown);
-process.on('SIGINT', gracefulShutdown);
-
-module.exports = app;
