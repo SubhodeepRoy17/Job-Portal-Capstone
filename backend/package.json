@@ -1,0 +1,29 @@
+{
+  "name": "job-portal-backend",
+  "version": "1.0.0",
+  "description": "Backend for Job Portal Capstone Project",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "cross-env NODE_ENV=production node src/server.js",
+    "dev": "cross-env NODE_ENV=development nodemon src/server.js",
+    "test": "cross-env NODE_ENV=test jest --testTimeout=10000",
+    "lint": "eslint src/",
+    "format": "prettier --write src/",
+    "seed": "node src/seeds/seedDatabase.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "express-validator": "^7.0.1",
+    "helmet": "^7.0.0",
+    "jsonwebtoken": "^9.0.0",
+    "mongoose": "^7.0.0",
+    "morgan": "^1.10.0"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0",
+    "nodemon": "^2.0.22"
+  }
+}
